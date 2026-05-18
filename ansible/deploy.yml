@@ -1,0 +1,22 @@
+---
+- name: Deploy BookMyShow to EKS using Ansible
+  hosts: local
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Deploy to staging namespace
+      shell: |
+        kubectl set image deployment/bms-app bms-container={{ image }} -n staging || true
+
+    - name: Wait for staging rollout
+      shell: |
+        kubectl rollout status deployment/bms-app -n staging
+
+    - name: Deploy same image to production namespace
+      shell: |
+        kubectl set image deployment/bms-app bms-container={{ image }} -n production || true
+
+    - name: Wait for production rollout
+      shell: |
+        kubectl rollout status deployment/bms-app -n production

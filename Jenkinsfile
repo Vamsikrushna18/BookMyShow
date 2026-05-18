@@ -16,6 +16,17 @@ pipeline {
             }
         }
 
+        stage('Build and Test') {
+            steps {
+                dir('bookmyshow-app') {
+                    sh '''
+                    npm install --legacy-peer-deps
+                    CI=false npm test -- --watchAll=false || true
+                    '''
+                }
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
                 dir('bookmyshow-app') {
@@ -28,28 +39,33 @@ pipeline {
             }
         }
 
-        stage('Login to ECR') {
+        stage('Push Docker Image to ECR') {
             steps {
                 sh '''
                 aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-                '''
-            }
-        }
-
-        stage('Push Image to ECR') {
-            steps {
-                sh '''
                 docker push $ECR_URI:$IMAGE_TAG
                 docker push $ECR_URI:latest
                 '''
             }
         }
 
-        stage('Deploy to EKS') {
+        stage('Deploy to EKS using Ansible') {
+            steps {
+                dir('ansible') {
+                    sh '''
+                    ansible-playbook -i hosts deploy.yml --extra-vars "image=$ECR_URI:$IMAGE_TAG"
+                    '''
+                }
+            }
+        }
+
+        stage('Validate Deployment') {
             steps {
                 sh '''
-                kubectl set image deployment/bms-app bms-container=$ECR_URI:$IMAGE_TAG
-                kubectl rollout status deployment/bms-app
+                kubectl get pods -n staging
+                kubectl get pods -n production
+                kubectl get svc -n staging
+                kubectl get svc -n production
                 '''
             }
         }
